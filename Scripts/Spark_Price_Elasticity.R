@@ -13,7 +13,12 @@
 
 library(sparklyr)
 library(dplyr)
+library(broom)
 
+# modeling
+
+library(ggplot2)
+library(dbplot)
 
 # 1.2 DATA ----
 
@@ -152,15 +157,18 @@ product_detail_tbl <- cereal_movement_tbl %>%
          start = START,
          end = END,
          year = YEAR,
+         profit = PROFIT,
          move = MOVE,
          quantity = QTY,
          price = PRICE,
          ok = OK) %>%
   mutate(revenue = price * move / quantity,
-         volume = move / quantity) %>%
+         volume = move / quantity,
+         cost = revenue - profit) %>%
   filter(move > 0,
          quantity > 0,
          price > 0,
+         cost > 0,
          ok == 1)
 
 product_lookup_tbl <- product_detail_tbl %>%
@@ -173,6 +181,88 @@ product_lookup_tbl <- product_detail_tbl %>%
   
 product_total_tbl <- product_detail_tbl %>%
   inner_join(product_lookup_tbl, by = "description") %>%
-  select(description, volume, price)
+  select(description, price, volume, cost)
+
+
+# 3.0 MACHINE LEARNING MODEL ----
+
+# 3.1 - Exploratory Data Analysis ----
+
+data_splits <- sdf_random_split(product_total_tbl,
+                                training = 0.7,
+                                testing = 0.3,
+                                seed = 42)
+product_train <- data_splits$training
+product_test <- data_splits$testing
+
+
+# Note: Putting a pin in cross validation
+
+# vfolds <- sdf_random_split(product_train,
+#                            weights = purrr::set_names(rep(0.1, 10), paste0("fold", 1:10)),
+#                            seed = 42)
+
+# analysis_set <- do.call(rbind, vfolds[2:10])
+# assessment_set <- vfolds[[1]]
+
+make_scale_cost <- function(analysis_data) {
   
+  scale_values <- analysis_data %>%
+    summarize(
+      mean_cost = mean(cost, na.rm = TRUE),
+      sd_cost = sd(cost, na.rm = TRUE)
+    ) %>%
+    collect()
+  
+  function(data) {
+    
+    data %>%
+      mutate(scaled_cost = (cost - !!scale_values$mean_cost) / !!scale_values$sd_cost)
+  }
+}
+
+scale_cost <- make_scale_cost(product_train)
+train_set <- scale_cost(product_train)
+validation_set <- scale_cost(product_test)
+
+# 3.2 - Linear Regression ----
+
+lr_1 <- ml_linear_regression(train_set, price ~ scaled_cost)
+
+validation_summary <- ml_evaluate(lr_1, validation_set)
+
+# validation_summary$root_mean_squared_error
+
+# Using the total dataset
+
+total_scale_cost <- make_scale_cost(product_total_tbl)
+total_set <- total_scale_cost(product_total_tbl)
+
+lr_2 <- ml_linear_regression(total_set, price ~ scaled_cost)
+
+glance_lr <- glance(lr_2)
+tidy_lr <- tidy(lr_2)
+augment_lr <- augment(lr_2)
+
+
+# 4.0 PIPELINE ----
+
+### maybe delete idk what i am doing hehe
+
+product_train <- product_train %>%
+  select(description, price, volume, cost)
+
+pipeline <- ml_pipeline(sc) %>%
+  ft_vector_assembler(input_cols = c("description", "price", "volume", "cost"),
+                      output_col = "features") %>%
+  ft_standard_scaler(input_col = "features",
+                     output_col = "features_scaled",
+                     with_mean = TRUE) %>%
+  ml_linear_regression(features_col = "features_scaled")
+  
+
+### Convert the ml_pipeline() object --- import libraries, import csv, everything afterwards should be one pipeline
+### Save the ml_pipeline object (batch processing)
+
+
 
