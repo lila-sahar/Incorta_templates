@@ -40,7 +40,6 @@ date_tbl <- spark_read_csv(sc,
                            name = "date_tbl",
                            path = "date_tbl.csv")
 
-### Note: You still have two other files to read into the spark cluster.
 
 # 2.0 PREPROCESS DATA ----
 
@@ -49,6 +48,8 @@ date_tbl <- spark_read_csv(sc,
 ## look-up table: cereal tibble
 
 ### currently does not work
+
+### hard coded to not need rn
 
 # cereal_movement_tbl %>%
   # mutate(description = case_when(
@@ -247,18 +248,18 @@ augment_lr <- augment(lr_2)
 
 # 4.0 PIPELINE ----
 
-### maybe delete idk what i am doing hehe
-
-product_train <- product_train %>%
-  select(description, price, volume, cost)
-
-pipeline <- ml_pipeline(sc) %>%
-  ft_vector_assembler(input_cols = c("description", "price", "volume", "cost"),
+products_pipeline <- ml_pipeline(sc) %>%
+  ft_dplyr_transformer(tbl = product_total_tbl) %>%
+  ft_vector_assembler(input_cols = c("description", "cost"),
                       output_col = "features") %>%
   ft_standard_scaler(input_col = "features",
                      output_col = "features_scaled",
                      with_mean = TRUE) %>%
-  ml_linear_regression(features_col = "features_scaled")
+  ft_r_formula(price ~ cost) %>%
+  ml_linear_regression()
+
+fitted_pipeline <- ml_fit(products_pipeline,
+                          data_splits$training)
   
 
 ### Convert the ml_pipeline() object --- import libraries, import csv, everything afterwards should be one pipeline
