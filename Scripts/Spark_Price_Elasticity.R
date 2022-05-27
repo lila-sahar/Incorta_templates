@@ -15,10 +15,6 @@ library(sparklyr)
 library(dplyr)
 library(broom)
 
-# modeling
-
-library(ggplot2)
-library(dbplot)
 
 # 1.2 DATA ----
 
@@ -151,6 +147,10 @@ date_tbl <- spark_read_csv(sc,
 product_detail_tbl <- cereal_movement_tbl %>%
   inner_join(cereal_upc_tbl, by = "UPC") %>%
   inner_join(date_tbl, by = "WEEK") %>%
+  filter(MOVE > 0,
+         QTY > 0,
+         PRICE > 0,
+         OK == 1) %>%
   select(store = STORE,
          upc = UPC,
          description = DESCRIP,
@@ -165,12 +165,8 @@ product_detail_tbl <- cereal_movement_tbl %>%
          ok = OK) %>%
   mutate(revenue = price * move / quantity,
          volume = move / quantity,
-         cost = revenue - profit) %>%
-  filter(move > 0,
-         quantity > 0,
-         price > 0,
-         cost > 0,
-         ok == 1)
+         cost = as.integer(revenue - profit)) %>%
+  filter(cost > 0)
 
 product_lookup_tbl <- product_detail_tbl %>%
   group_by(description) %>%
@@ -182,7 +178,7 @@ product_lookup_tbl <- product_detail_tbl %>%
   
 product_total_tbl <- product_detail_tbl %>%
   inner_join(product_lookup_tbl, by = "description") %>%
-  select(description, price, volume, cost)
+  select(description, price, cost)
 
 
 # 3.0 MACHINE LEARNING MODEL ----
@@ -248,6 +244,37 @@ augment_lr <- augment(lr_2)
 
 # 4.0 PIPELINE ----
 
+## K-Means Clustering
+
+# fpa measures - total revenue, gross margin, average selling price (look at os example) & stand alone app
+# don't choose values that are inter related
+
+for (descrip in description) {
+  
+  product_total_kmeans <- sdf_copy_to(sc, product_total_tbl, name = "product_total_tbl", overwrite = TRUE) %>%
+    group_by(description)
+  
+  for (n_cluster in 2:10) {
+    
+    product_total_kmeans %>%
+      ml_bisecting_kmeans(formula = price ~ cost, k = n_cluster) %>%
+      na.omit()
+    
+    for (n in n_cluster) {
+      
+      kmeans_tbl <- fitted(product_total_kmeans)
+    }
+    
+  }
+  
+}
+  
+  silhouette_avg <- ml_compute_silhouette_measure(fit_cost_price,
+                                                         product_summary_tbl,
+                                                         distance_measure = c("squaredEuclidean", "cosine"))
+
+
+## Define the pipeline
 products_pipeline <- ml_pipeline(sc) %>%
   ft_dplyr_transformer(tbl = product_total_tbl) %>%
   ft_vector_assembler(input_cols = c("description", "cost"),
@@ -260,6 +287,9 @@ products_pipeline <- ml_pipeline(sc) %>%
 
 fitted_pipeline <- ml_fit(products_pipeline,
                           data_splits$training)
+
+predictions <- ml_transform(fitted_pipeline,
+                            data_splits$testing)
   
 
 ### Convert the ml_pipeline() object --- import libraries, import csv, everything afterwards should be one pipeline
