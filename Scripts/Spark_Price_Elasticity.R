@@ -165,7 +165,7 @@ product_detail_tbl <- cereal_movement_tbl %>%
          ok = OK) %>%
   mutate(revenue = price * move / quantity,
          volume = move / quantity,
-         cost = revenue - profit) %>%
+         cost = as.integer(revenue - profit)) %>%
   filter(cost > 0)
 
 product_lookup_tbl <- product_detail_tbl %>%
@@ -178,7 +178,7 @@ product_lookup_tbl <- product_detail_tbl %>%
   
 product_total_tbl <- product_detail_tbl %>%
   inner_join(product_lookup_tbl, by = "description") %>%
-  select(description, price, volume, cost)
+  select(description, price, cost)
 
 
 # 3.0 MACHINE LEARNING MODEL ----
@@ -244,17 +244,35 @@ augment_lr <- augment(lr_2)
 
 # 4.0 PIPELINE ----
 
-## Split the data into train and validation sets
+## K-Means Clustering
 
-product_total_data <- product_total_tbl %>%
-  sdf_random_split(train = 2/3, validation = 1/3, seed = 123)
+# fpa measures - total revenue, gross margin, average selling price (look at os example) & stand alone app
+# don't choose values that are inter related
 
-## Define the pipeline
+for (descrip in description) {
+  
+  product_total_kmeans <- sdf_copy_to(sc, product_total_tbl, name = "product_total_tbl", overwrite = TRUE) %>%
+    group_by(description)
+  
+  for (n_cluster in 2:10) {
+    
+    product_total_kmeans %>%
+      ml_bisecting_kmeans(formula = price ~ cost, k = n_cluster) %>%
+      na.omit()
+    
+    for (n in n_cluster) {
+      
+      kmeans_tbl <- fitted(product_total_kmeans)
+    }
+    
+  }
+  
+}
+  
+  silhouette_avg <- ml_compute_silhouette_measure(fit_cost_price,
+                                                         product_summary_tbl,
+                                                         distance_measure = c("squaredEuclidean", "cosine"))
 
-pipeline <- ml_pipeline(sc) %>%
-  ft_dplyr_transformer(
-    product_total_data$train
-  )
 
 ## Define the pipeline
 products_pipeline <- ml_pipeline(sc) %>%
