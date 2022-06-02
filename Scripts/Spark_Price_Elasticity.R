@@ -177,8 +177,7 @@ product_lookup_tbl <- product_detail_tbl %>%
          sample_size > 100)
   
 product_total_tbl <- product_detail_tbl %>%
-  inner_join(product_lookup_tbl, by = "description") %>%
-  select(description, price, cost)
+  inner_join(product_lookup_tbl, by = "description")
 
 
 # 3.0 MACHINE LEARNING MODEL ----
@@ -249,29 +248,63 @@ augment_lr <- augment(lr_2)
 # fpa measures - total revenue, gross margin, average selling price (look at os example) & stand alone app
 # don't choose values that are inter related
 
-for (descrip in description) {
+### for transaction data
+### NOTE: Make these lists into a dataframe after the analysis
+transaction_k_value <- c()
+
+transaction_silhouette_coef <- c()
+
+transaction_cluster_center <- c()
+
+transaction_std_coef <- c()
+
+for (n_cluster in 2:3) {
+  
+  transaction_k_value[n_cluster] <- n_cluster
   
   product_total_kmeans <- sdf_copy_to(sc, product_total_tbl, name = "product_total_tbl", overwrite = TRUE) %>%
-    group_by(description)
+    select(description, move, volume, price, cost, revenue) %>%
+    ml_kmeans(formula = ~ price + move, k = n_cluster) %>%
+    na.omit()
   
-  for (n_cluster in 2:10) {
+  transaction_cluster_center <- c(transaction_cluster_center,
+                                  product_total_kmeans)
+  
+  transaction_silhouette <- ml_compute_silhouette_measure(model = product_total_kmeans,
+                                                 dataset = product_total_tbl,
+                                                 distance_measure = c("squaredEuclidean", "cosine"))
+  
+  transaction_silhouette_coef <- c(transaction_silhouette_coef,
+                                        transaction_silhouette)
+  
+  # doesn't like this
+  transaction_std_coef <- c(transaction_std_coef,
+                            product_total_kmeans %>%
+                              count())
     
-    product_total_kmeans %>%
-      ml_bisecting_kmeans(formula = price ~ cost, k = n_cluster) %>%
-      na.omit()
-    
-    for (n in n_cluster) {
-      
-      kmeans_tbl <- fitted(product_total_kmeans)
-    }
-    
-  }
+}
+
+# for groups of brands
+
+brand_group_total_tbl <- product_total_tbl %>%
+  group_by(description) %>%
+  summarize(avg_price = mean(price),
+            total_revenue = sum(revenue),
+            transactional_count = n())
+  
+
+for (n_cluster in 2:10) {
+  
+  brand_total_kmeans <- sdf_copy_to(sc, brand_group_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
+    ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
+    na.omit()
   
 }
-  
-  silhouette_avg <- ml_compute_silhouette_measure(fit_cost_price,
-                                                         product_summary_tbl,
-                                                         distance_measure = c("squaredEuclidean", "cosine"))
+
+
+silhouette_avg <- ml_compute_silhouette_measure(model = product_total_kmeans,
+                                                dataset = product_total_tbl,
+                                                distance_measure = c("squaredEuclidean", "cosine"))
 
 
 ## Define the pipeline
