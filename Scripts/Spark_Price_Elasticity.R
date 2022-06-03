@@ -258,7 +258,7 @@ transaction_cluster_center <- c()
 
 transaction_std_coef <- c()
 
-for (n_cluster in 2:3) {
+for (n_cluster in 2:10) {
   
   transaction_k_value[n_cluster] <- n_cluster
   
@@ -270,21 +270,30 @@ for (n_cluster in 2:3) {
   transaction_cluster_center <- c(transaction_cluster_center,
                                   product_total_kmeans)
   
-  transaction_silhouette <- ml_compute_silhouette_measure(model = product_total_kmeans,
+  # this works as a vector but I want it in list format
+  transaction_silhouette <- c(transaction_silhouette, ml_compute_silhouette_measure(model = product_total_kmeans,
                                                  dataset = product_total_tbl,
-                                                 distance_measure = c("squaredEuclidean", "cosine"))
+                                                 distance_measure = c("squaredEuclidean", "cosine")))
   
   transaction_silhouette_coef <- c(transaction_silhouette_coef,
                                         transaction_silhouette)
   
   # doesn't like this
-  transaction_std_coef <- c(transaction_std_coef,
-                            product_total_kmeans %>%
-                              count())
+  #transaction_std_coef <- c(transaction_std_coef,
+  #                          product_total_kmeans %>%
+  #                            count())
     
 }
 
 # for groups of brands
+### NOTE: Make these lists into a dataframe after the analysis
+brand_k_value <- c()
+
+brand_silhouette_coef <- c()
+
+brand_cluster_center <- c()
+
+brand_std_coef <- c()
 
 brand_group_total_tbl <- product_total_tbl %>%
   group_by(description) %>%
@@ -295,16 +304,29 @@ brand_group_total_tbl <- product_total_tbl %>%
 
 for (n_cluster in 2:10) {
   
+  brand_k_value[n_cluster] <- n_cluster
+  
   brand_total_kmeans <- sdf_copy_to(sc, brand_group_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
     ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
     na.omit()
   
+  brand_cluster_center <- c(brand_cluster_center,
+                                  brand_total_kmeans)
+  
+  # this works as a vector but I want it in list format
+  brand_silhouette <- c(brand_silhouette, ml_compute_silhouette_measure(model = brand_total_kmeans,
+                                                                                    dataset = brand_group_total_tbl,
+                                                                                    distance_measure = c("squaredEuclidean", "cosine")))
+  
+  brand_silhouette_coef <- c(brand_silhouette_coef,
+                                   brand_silhouette)
+  
+  # doesn't like this
+  #brand_std_coef <- c(brand_std_coef,
+  #                          brand_total_kmeans %>%
+  #                            count())
+  
 }
-
-
-silhouette_avg <- ml_compute_silhouette_measure(model = product_total_kmeans,
-                                                dataset = product_total_tbl,
-                                                distance_measure = c("squaredEuclidean", "cosine"))
 
 
 ## Define the pipeline
