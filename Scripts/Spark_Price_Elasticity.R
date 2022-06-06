@@ -45,7 +45,7 @@ date_tbl <- spark_read_csv(sc,
 
 ### currently does not work
 
-### hard coded to not need rn
+### hard coded so not needed rn
 
 # cereal_movement_tbl %>%
   # mutate(description = case_when(
@@ -192,7 +192,7 @@ product_train <- data_splits$training
 product_test <- data_splits$testing
 
 
-# Note: Putting a pin in cross validation
+### Note: Putting a pin in cross validation
 
 # vfolds <- sdf_random_split(product_train,
 #                            weights = purrr::set_names(rep(0.1, 10), paste0("fold", 1:10)),
@@ -229,7 +229,7 @@ validation_summary <- ml_evaluate(lr_1, validation_set)
 
 # validation_summary$root_mean_squared_error
 
-# Using the total dataset
+### Using the total dataset
 
 total_scale_cost <- make_scale_cost(product_total_tbl)
 total_set <- total_scale_cost(product_total_tbl)
@@ -245,9 +245,6 @@ augment_lr <- augment(lr_2)
 
 ## K-Means Clustering
 
-# fpa measures - total revenue, gross margin, average selling price (look at os example) & stand alone app
-# don't choose values that are inter related
-
 ### for transaction data
 ### NOTE: Make these lists into a dataframe after the analysis
 transaction_k_value <- c()
@@ -256,34 +253,35 @@ transaction_silhouette_coef <- c()
 
 transaction_cluster_center <- c()
 
-transaction_std_coef <- c()
+### when there is availability: we would like to calculate the standard deviation of
+### the sample size of each cluster. another way to access if the cluster size is good.
+# transaction_std_coef <- c()
 
-for (n_cluster in 2:10) {
+### only one copy of the dataset
+product_total <- sdf_copy_to(sc, product_total_tbl, name = "product_total_tbl", overwrite = TRUE) %>%
+  select(description, move, volume, price, cost, revenue)
+
+for (n_cluster in 2:3) {
   
   transaction_k_value[n_cluster] <- n_cluster
   
-  product_total_kmeans <- sdf_copy_to(sc, product_total_tbl, name = "product_total_tbl", overwrite = TRUE) %>%
-    select(description, move, volume, price, cost, revenue) %>%
+  product_total_kmeans <- product_total %>%
     ml_kmeans(formula = ~ price + move, k = n_cluster) %>%
     na.omit()
   
   transaction_cluster_center <- c(transaction_cluster_center,
                                   product_total_kmeans)
   
-  # this works as a vector but I want it in list format
-  transaction_silhouette <- c(transaction_silhouette, ml_compute_silhouette_measure(model = product_total_kmeans,
-                                                 dataset = product_total_tbl,
-                                                 distance_measure = c("squaredEuclidean", "cosine")))
+  transaction_silhouette <- as.list(ml_compute_silhouette_measure(model = product_total_kmeans,
+                                                                 dataset = product_total,
+                                                                 distance_measure = c("squaredEuclidean", "cosine")))
   
   transaction_silhouette_coef <- c(transaction_silhouette_coef,
-                                        transaction_silhouette)
-  
-  # doesn't like this
-  #transaction_std_coef <- c(transaction_std_coef,
-  #                          product_total_kmeans %>%
-  #                            count())
+                                   transaction_silhouette)
     
 }
+
+
 
 # for groups of brands
 ### NOTE: Make these lists into a dataframe after the analysis
@@ -313,18 +311,14 @@ for (n_cluster in 2:10) {
   brand_cluster_center <- c(brand_cluster_center,
                                   brand_total_kmeans)
   
-  # this works as a vector but I want it in list format
+  ### this is broken and you must fix it
+  ### this works as a vector but I want it in list format
   brand_silhouette <- c(brand_silhouette, ml_compute_silhouette_measure(model = brand_total_kmeans,
                                                                                     dataset = brand_group_total_tbl,
                                                                                     distance_measure = c("squaredEuclidean", "cosine")))
   
   brand_silhouette_coef <- c(brand_silhouette_coef,
                                    brand_silhouette)
-  
-  # doesn't like this
-  #brand_std_coef <- c(brand_std_coef,
-  #                          brand_total_kmeans %>%
-  #                            count())
   
 }
 
