@@ -255,19 +255,21 @@ transaction_cluster_center <- c()
 
 ### when there is availability: we would like to calculate the standard deviation of
 ### the sample size of each cluster. another way to access if the cluster size is good.
-# transaction_std_coef <- c()
+transaction_std_coef <- c()
 
 ### only one copy of the dataset
-product_total <- sdf_copy_to(sc, product_total_tbl, name = "product_total_tbl", overwrite = TRUE) %>%
-  select(description, move, volume, price, cost, revenue)
+product_total <- sdf_copy_to(sc, product_total_tbl, name = "product_total", overwrite = TRUE) %>%
+  select(description, move, volume, price, cost, revenue) %>%
+  na.omit()
 
 for (n_cluster in 2:3) {
   
   transaction_k_value[n_cluster] <- n_cluster
   
   product_total_kmeans <- product_total %>%
-    ml_kmeans(formula = ~ price + move, k = n_cluster) %>%
-    na.omit()
+    ml_kmeans(formula = ~ price + move, k = n_cluster)
+  
+  product_total_kmeans_tbl <- ml_predict(product_total_kmeans, product_total)
   
   transaction_cluster_center <- c(transaction_cluster_center,
                                   product_total_kmeans)
@@ -278,9 +280,16 @@ for (n_cluster in 2:3) {
   
   transaction_silhouette_coef <- c(transaction_silhouette_coef,
                                    transaction_silhouette)
+  
+  # this isn't counting data points within a cluster
+  transaction_cluster_count <- product_total_kmeans_tbl %>%
+    group_by(n_cluster) %>%
+    tally() 
+  
+  transaction_std_coef <- c(transaction_std_coef,
+                            transaction_cluster_count)
     
 }
-
 
 
 # for groups of brands
@@ -293,33 +302,35 @@ brand_cluster_center <- c()
 
 brand_std_coef <- c()
 
-brand_group_total_tbl <- product_total_tbl %>%
+brand_group_total_tbl <- sdf_copy_to(sc, product_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
   group_by(description) %>%
   summarize(avg_price = mean(price),
             total_revenue = sum(revenue),
-            transactional_count = n())
-  
+            transactional_count = n()) %>%
+  na.omit()
 
-for (n_cluster in 2:10) {
+for (n_cluster in 2:3) {
   
   brand_k_value[n_cluster] <- n_cluster
   
-  brand_total_kmeans <- sdf_copy_to(sc, brand_group_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
+  brand_total_kmeans <- brand_group_total_tbl %>%
     ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
     na.omit()
   
-  brand_cluster_center <- c(brand_cluster_center,
-                                  brand_total_kmeans)
+  ### what is cluster 0?
+  brand_total_kmeans_tbl <- ml_predict(brand_total_kmeans,
+                                       brand_group_total_tbl)
   
-  ### this is broken and you must fix it
-  ### this works as a vector but I want it in list format
-  brand_silhouette <- c(brand_silhouette, ml_compute_silhouette_measure(model = brand_total_kmeans,
-                                                                                    dataset = brand_group_total_tbl,
-                                                                                    distance_measure = c("squaredEuclidean", "cosine")))
+  ### this is rewritting values everytime it runs the amount of clusters
+  brand_cluster_center <- c(brand_cluster_center,
+                            brand_total_kmeans)
+  
+  brand_silhouette <- as.list(ml_compute_silhouette_measure(model = brand_total_kmeans,
+                                                            dataset = brand_group_total_tbl,
+                                                            distance_measure = c("squaredEuclidean", "cosine")))
   
   brand_silhouette_coef <- c(brand_silhouette_coef,
-                                   brand_silhouette)
-  
+                             brand_silhouette)
 }
 
 
