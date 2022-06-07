@@ -245,6 +245,34 @@ augment_lr <- augment(lr_2)
 
 ## K-Means Clustering
 
+## Grouped Data by description
+
+### import
+grouped_df <- sdf_copy_to(sc, product_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
+  group_by(description) %>%
+  summarize(avg_price = mean(price),
+            total_revenue = sum(revenue),
+            transaction_count = n()) %>%
+  na.omit()
+
+### transformers
+grouped_pipeline <- grouped_df %>%
+  ft_dplyr_transformer(sc, .) %>%
+  ft_vector_assembler(input_cols = c("avg_price", "total_revenue", "transaction_count"),
+                                 output_col = "unscaled_features") %>%
+  ft_standard_scaler(input_col = "unscaled_features",
+                             output_col = "features") %>%
+  ml_kmeans()
+  
+  
+ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
+na.omit()
+
+### model
+
+kmeans <- ml_kmeans()
+
+
 ### for transaction data
 ### NOTE: Make these lists into a dataframe after the analysis
 transaction_k_value <- c()
@@ -317,9 +345,9 @@ for (n_cluster in 2:3) {
     ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
     na.omit()
   
-  ### what is cluster 0?
   brand_total_kmeans_tbl <- ml_predict(brand_total_kmeans,
-                                       brand_group_total_tbl)
+                                       brand_group_total_tbl) %>%
+    select(description, prediction)
   
   ### this is rewritting values everytime it runs the amount of clusters
   brand_cluster_center <- c(brand_cluster_center,
