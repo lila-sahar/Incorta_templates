@@ -255,23 +255,39 @@ grouped_df <- sdf_copy_to(sc, product_total_tbl, name = "brand_group_total_tbl",
             transaction_count = n()) %>%
   na.omit()
 
-### transformers
-grouped_pipeline <- grouped_df %>%
-  ft_dplyr_transformer(sc, .) %>%
+### create a pipeline
+grouped_pipeline <- ml_pipeline(sc) %>%
+  ft_dplyr_transformer(tbl = grouped_df) %>%
   ft_vector_assembler(input_cols = c("avg_price", "total_revenue", "transaction_count"),
                                  output_col = "unscaled_features") %>%
   ft_standard_scaler(input_col = "unscaled_features",
                              output_col = "features") %>%
-  ml_kmeans()
+  ml_kmeans(uid = "kmeans")
+
+### specify hyperparameter grid
+grouped_grid <- list(
+  kmeans = list(
+    k = c(2:10)
+  )
+)
+
+### create the cross validator object
+grouped_cv <- ml_cross_validator(sc,
+                                 estimator = grouped_pipeline,
+                                 estimator_param_maps = grouped_grid,
+                                 evaluator = ml_clustering_evaluator(sc),
+                                 num_folds = 3,
+                                 parallelism = 1)
+
+### train the model
+grouped_cv_model <- ml_fit(grouped_cv, dplyr::tbl(sc, "grouped_df"))
+
+### print the metrics
+ml_validation_metrics(grouped_cv_model)
   
-  
-ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
-na.omit()
+
 
 ### model
-
-kmeans <- ml_kmeans()
-
 
 ### for transaction data
 ### NOTE: Make these lists into a dataframe after the analysis
