@@ -253,25 +253,82 @@ grouped_df <- sdf_copy_to(sc, product_total_tbl, name = "brand_group_total_tbl",
   summarize(avg_price = mean(price),
             total_revenue = sum(revenue),
             transaction_count = n()) %>%
-  na.omit()
+  collect() %>%
+  spark_write_csv(., path = "grouped-df.csv")
 
-### transformers
-grouped_pipeline <- grouped_df %>%
-  ft_dplyr_transformer(sc, .) %>%
+grouped_df_1 <- ml_read(grouped_df)
+
+### create a pipeline
+grouped_pipeline <- ml_pipeline(sc) %>%
+  #ft_dplyr_transformer(tbl = grouped_df) %>%
   ft_vector_assembler(input_cols = c("avg_price", "total_revenue", "transaction_count"),
                                  output_col = "unscaled_features") %>%
   ft_standard_scaler(input_col = "unscaled_features",
                              output_col = "features") %>%
-  ml_kmeans()
+  ml_kmeans(k=2)
+
+### specify hyperparameter grid
+grouped_grid <- list(
+  kmeans = list(
+    k = c(2, 3, 4, 5, 6, 7, 8, 9, 10)
+  )
+)
+
+### create the cross validator object
+grouped_cv <- ml_cross_validator(sc,
+                                 estimator = grouped_pipeline,
+                                 estimator_param_maps = grouped_grid,
+                                 evaluator = ml_clustering_evaluator(sc),
+                                 num_folds = 3)
+
+# ml_param_map(grouped_pipeline)
+
+### single test
+# ml_fit(grouped_pipeline, grouped_df)
+
+### train the model
+grouped_cv_model <- ml_fit(grouped_cv, grouped_df)
+
+### print the metrics
+ml_validation_metrics(grouped_cv_model)
   
-  
-ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
-na.omit()
+## Transaction Data
+
+### import
+product_df <- sdf_copy_to(sc, product_total_tbl, name = "product_total", overwrite = TRUE) %>%
+  select(description, move, volume, price, cost, revenue) %>%
+  na.omit()
+
+### create a pipeline
+product_pipeline <- ml_pipeline(sc) %>%
+  #ft_dplyr_transformer(tbl = product_df) %>%
+  ft_vector_assembler(input_cols = c("volume", "price"),
+                      output_col = "unscaled_features") %>%
+  ft_standard_scaler(input_col = "unscaled_features",
+                     output_col = "features") %>%
+  ml_kmeans(k=2)
+
+### specify hyperparameter grid
+product_grid <- list(
+  kmeans = list(
+    k = c(2, 3, 4, 5, 6, 7, 8, 9, 10)
+  )
+)
+
+### create the cross validator object
+product_cv <- ml_cross_validator(sc,
+                                 estimator = product_pipeline,
+                                 estimator_param_maps = product_grid,
+                                 evaluator = ml_clustering_evaluator(sc),
+                                 num_folds = 3)
+
+### train the model
+product_cv_model <- ml_fit(product_cv, product_df)
+
+### print the metrics
+ml_validation_metrics(product_cv_model)
 
 ### model
-
-kmeans <- ml_kmeans()
-
 
 ### for transaction data
 ### NOTE: Make these lists into a dataframe after the analysis
