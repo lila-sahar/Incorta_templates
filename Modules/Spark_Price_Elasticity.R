@@ -177,7 +177,8 @@ product_lookup_tbl <- product_detail_tbl %>%
          sample_size > 100)
   
 product_total_tbl <- product_detail_tbl %>%
-  inner_join(product_lookup_tbl, by = "description")
+  inner_join(product_lookup_tbl, by = "description") %>%
+  write.csv(., file = "..//Processed//product_total_tbl.csv")
 
 
 # # 3.0 MACHINE LEARNING MODEL ----
