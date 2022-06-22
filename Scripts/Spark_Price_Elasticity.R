@@ -180,201 +180,201 @@ product_total_tbl <- product_detail_tbl %>%
   inner_join(product_lookup_tbl, by = "description")
 
 
-# 3.0 MACHINE LEARNING MODEL ----
-
-# 3.1 - Exploratory Data Analysis ----
-
-data_splits <- sdf_random_split(product_total_tbl,
-                                training = 0.7,
-                                testing = 0.3,
-                                seed = 42)
-product_train <- data_splits$training
-product_test <- data_splits$testing
-
-
-### Note: Putting a pin in cross validation
-
-# vfolds <- sdf_random_split(product_train,
-#                            weights = purrr::set_names(rep(0.1, 10), paste0("fold", 1:10)),
-#                            seed = 42)
-
-# analysis_set <- do.call(rbind, vfolds[2:10])
-# assessment_set <- vfolds[[1]]
-
-make_scale_cost <- function(analysis_data) {
-  
-  scale_values <- analysis_data %>%
-    summarize(
-      mean_cost = mean(cost, na.rm = TRUE),
-      sd_cost = sd(cost, na.rm = TRUE)
-    ) %>%
-    collect()
-  
-  function(data) {
-    
-    data %>%
-      mutate(scaled_cost = (cost - !!scale_values$mean_cost) / !!scale_values$sd_cost)
-  }
-}
-
-scale_cost <- make_scale_cost(product_train)
-train_set <- scale_cost(product_train)
-validation_set <- scale_cost(product_test)
-
-# 3.2 - Linear Regression ----
-
-lr_1 <- ml_linear_regression(train_set, price ~ scaled_cost)
-
-validation_summary <- ml_evaluate(lr_1, validation_set)
-
-# validation_summary$root_mean_squared_error
-
-### Using the total dataset
-
-total_scale_cost <- make_scale_cost(product_total_tbl)
-total_set <- total_scale_cost(product_total_tbl)
-
-lr_2 <- ml_linear_regression(total_set, price ~ scaled_cost)
-
-glance_lr <- glance(lr_2)
-tidy_lr <- tidy(lr_2)
-augment_lr <- augment(lr_2)
-
-
-# 4.0 PIPELINE ----
-
-## K-Means Clustering
-
-## Grouped Data by description
-
-### import
-grouped_df <- sdf_copy_to(sc, product_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
-  group_by(description) %>%
-  summarize(avg_price = mean(price),
-            total_revenue = sum(revenue),
-            transaction_count = n())
-
-### create a pipeline
-grouped_pipeline <- ml_pipeline(sc) %>%
-  #ft_dplyr_transformer(tbl = grouped_df) %>%
-  ft_vector_assembler(input_cols = c("avg_price", "total_revenue", "transaction_count"),
-                                 output_col = "unscaled_features") %>%
-  ft_standard_scaler(input_col = "unscaled_features",
-                             output_col = "features") %>%
-  ml_kmeans(k = 3)
-
-### specify hyperparameter grid
-grouped_grid <- list(
-  kmeans = list(
-    k = c(3, 4, 5, 6, 7, 8, 9, 10)
-  )
-)
-
-### create the cross validator object
-grouped_cv <- ml_cross_validator(sc,
-                                 estimator = grouped_pipeline,
-                                 estimator_param_maps = grouped_grid,
-                                 evaluator = ml_clustering_evaluator(sc),
-                                 num_folds = 3)
-
-# ml_param_map(grouped_pipeline)
-
-### single test
-# ml_fit(grouped_pipeline, grouped_df)
-
-### train the model
-grouped_cv_model <- ml_fit(grouped_cv, grouped_df)
-
-### print the metrics
-ml_validation_metrics(grouped_cv_model)
-
-# ### model
-
-# ### for transaction data
-# ### NOTE: Make these lists into a dataframe after the analysis
-# transaction_k_value <- c()
+# # 3.0 MACHINE LEARNING MODEL ----
 # 
-# transaction_silhouette_coef <- c()
+# # 3.1 - Exploratory Data Analysis ----
 # 
-# transaction_cluster_center <- c()
+# data_splits <- sdf_random_split(product_total_tbl,
+#                                 training = 0.7,
+#                                 testing = 0.3,
+#                                 seed = 42)
+# product_train <- data_splits$training
+# product_test <- data_splits$testing
 # 
-# ### when there is availability: we would like to calculate the standard deviation of
-# ### the sample size of each cluster. another way to access if the cluster size is good.
-# transaction_std_coef <- c()
 # 
-# ### only one copy of the dataset
-# product_total <- sdf_copy_to(sc, product_total_tbl, name = "product_total", overwrite = TRUE) %>%
-#   select(description, move, volume, price, cost, revenue) %>%
-#   na.omit()
+# ### Note: Putting a pin in cross validation
 # 
-# for (n_cluster in 2:3) {
+# # vfolds <- sdf_random_split(product_train,
+# #                            weights = purrr::set_names(rep(0.1, 10), paste0("fold", 1:10)),
+# #                            seed = 42)
+# 
+# # analysis_set <- do.call(rbind, vfolds[2:10])
+# # assessment_set <- vfolds[[1]]
+# 
+# make_scale_cost <- function(analysis_data) {
 #   
-#   transaction_k_value[n_cluster] <- n_cluster
+#   scale_values <- analysis_data %>%
+#     summarize(
+#       mean_cost = mean(cost, na.rm = TRUE),
+#       sd_cost = sd(cost, na.rm = TRUE)
+#     ) %>%
+#     collect()
 #   
-#   product_total_kmeans <- product_total %>%
-#     ml_kmeans(formula = ~ price + move, k = n_cluster)
-#   
-#   product_total_kmeans_tbl <- ml_predict(product_total_kmeans, product_total)
-#   
-#   transaction_cluster_center <- c(transaction_cluster_center,
-#                                   product_total_kmeans)
-#   
-#   transaction_silhouette <- as.list(ml_compute_silhouette_measure(model = product_total_kmeans,
-#                                                                  dataset = product_total,
-#                                                                  distance_measure = c("squaredEuclidean", "cosine")))
-#   
-#   transaction_silhouette_coef <- c(transaction_silhouette_coef,
-#                                    transaction_silhouette)
-#   
-#   # this isn't counting data points within a cluster
-#   transaction_cluster_count <- product_total_kmeans_tbl %>%
-#     group_by(n_cluster) %>%
-#     tally() 
-#   
-#   transaction_std_coef <- c(transaction_std_coef,
-#                             transaction_cluster_count)
+#   function(data) {
 #     
+#     data %>%
+#       mutate(scaled_cost = (cost - !!scale_values$mean_cost) / !!scale_values$sd_cost)
+#   }
 # }
 # 
+# scale_cost <- make_scale_cost(product_train)
+# train_set <- scale_cost(product_train)
+# validation_set <- scale_cost(product_test)
 # 
-# # for groups of brands
-# ### NOTE: Make these lists into a dataframe after the analysis
-# brand_k_value <- c()
+# # 3.2 - Linear Regression ----
 # 
-# brand_silhouette_coef <- c()
+# lr_1 <- ml_linear_regression(train_set, price ~ scaled_cost)
 # 
-# brand_cluster_center <- c()
+# validation_summary <- ml_evaluate(lr_1, validation_set)
 # 
-# brand_std_coef <- c()
+# # validation_summary$root_mean_squared_error
 # 
-# brand_group_total_tbl <- sdf_copy_to(sc, product_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
+# ### Using the total dataset
+# 
+# total_scale_cost <- make_scale_cost(product_total_tbl)
+# total_set <- total_scale_cost(product_total_tbl)
+# 
+# lr_2 <- ml_linear_regression(total_set, price ~ scaled_cost)
+# 
+# glance_lr <- glance(lr_2)
+# tidy_lr <- tidy(lr_2)
+# augment_lr <- augment(lr_2)
+# 
+# 
+# # 4.0 PIPELINE ----
+# 
+# ## K-Means Clustering
+# 
+# ## Grouped Data by description
+# 
+# ### import
+# grouped_df <- sdf_copy_to(sc, product_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
 #   group_by(description) %>%
 #   summarize(avg_price = mean(price),
 #             total_revenue = sum(revenue),
-#             transactional_count = n()) %>%
-#   na.omit()
+#             transaction_count = n())
 # 
-# for (n_cluster in 2:3) {
-#   
-#   brand_k_value[n_cluster] <- n_cluster
-#   
-#   brand_total_kmeans <- brand_group_total_tbl %>%
-#     ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
-#     na.omit()
-#   
-#   brand_total_kmeans_tbl <- ml_predict(brand_total_kmeans,
-#                                        brand_group_total_tbl) %>%
-#     select(description, prediction)
-#   
-#   ### this is rewritting values everytime it runs the amount of clusters
-#   brand_cluster_center <- c(brand_cluster_center,
-#                             brand_total_kmeans)
-#   
-#   brand_silhouette <- as.list(ml_compute_silhouette_measure(model = brand_total_kmeans,
-#                                                             dataset = brand_group_total_tbl,
-#                                                             distance_measure = c("squaredEuclidean", "cosine")))
-#   
-#   brand_silhouette_coef <- c(brand_silhouette_coef,
-#                              brand_silhouette)
-# }
+# ### create a pipeline
+# grouped_pipeline <- ml_pipeline(sc) %>%
+#   #ft_dplyr_transformer(tbl = grouped_df) %>%
+#   ft_vector_assembler(input_cols = c("avg_price", "total_revenue", "transaction_count"),
+#                                  output_col = "unscaled_features") %>%
+#   ft_standard_scaler(input_col = "unscaled_features",
+#                              output_col = "features") %>%
+#   ml_kmeans(k = 3)
+# 
+# ### specify hyperparameter grid
+# grouped_grid <- list(
+#   kmeans = list(
+#     k = c(3, 4, 5, 6, 7, 8, 9, 10)
+#   )
+# )
+# 
+# ### create the cross validator object
+# grouped_cv <- ml_cross_validator(sc,
+#                                  estimator = grouped_pipeline,
+#                                  estimator_param_maps = grouped_grid,
+#                                  evaluator = ml_clustering_evaluator(sc),
+#                                  num_folds = 3)
+# 
+# # ml_param_map(grouped_pipeline)
+# 
+# ### single test
+# # ml_fit(grouped_pipeline, grouped_df)
+# 
+# ### train the model
+# grouped_cv_model <- ml_fit(grouped_cv, grouped_df)
+# 
+# ### print the metrics
+# ml_validation_metrics(grouped_cv_model)
+# 
+# # ### model
+# 
+# # ### for transaction data
+# # ### NOTE: Make these lists into a dataframe after the analysis
+# # transaction_k_value <- c()
+# # 
+# # transaction_silhouette_coef <- c()
+# # 
+# # transaction_cluster_center <- c()
+# # 
+# # ### when there is availability: we would like to calculate the standard deviation of
+# # ### the sample size of each cluster. another way to access if the cluster size is good.
+# # transaction_std_coef <- c()
+# # 
+# # ### only one copy of the dataset
+# # product_total <- sdf_copy_to(sc, product_total_tbl, name = "product_total", overwrite = TRUE) %>%
+# #   select(description, move, volume, price, cost, revenue) %>%
+# #   na.omit()
+# # 
+# # for (n_cluster in 2:3) {
+# #   
+# #   transaction_k_value[n_cluster] <- n_cluster
+# #   
+# #   product_total_kmeans <- product_total %>%
+# #     ml_kmeans(formula = ~ price + move, k = n_cluster)
+# #   
+# #   product_total_kmeans_tbl <- ml_predict(product_total_kmeans, product_total)
+# #   
+# #   transaction_cluster_center <- c(transaction_cluster_center,
+# #                                   product_total_kmeans)
+# #   
+# #   transaction_silhouette <- as.list(ml_compute_silhouette_measure(model = product_total_kmeans,
+# #                                                                  dataset = product_total,
+# #                                                                  distance_measure = c("squaredEuclidean", "cosine")))
+# #   
+# #   transaction_silhouette_coef <- c(transaction_silhouette_coef,
+# #                                    transaction_silhouette)
+# #   
+# #   # this isn't counting data points within a cluster
+# #   transaction_cluster_count <- product_total_kmeans_tbl %>%
+# #     group_by(n_cluster) %>%
+# #     tally() 
+# #   
+# #   transaction_std_coef <- c(transaction_std_coef,
+# #                             transaction_cluster_count)
+# #     
+# # }
+# # 
+# # 
+# # # for groups of brands
+# # ### NOTE: Make these lists into a dataframe after the analysis
+# # brand_k_value <- c()
+# # 
+# # brand_silhouette_coef <- c()
+# # 
+# # brand_cluster_center <- c()
+# # 
+# # brand_std_coef <- c()
+# # 
+# # brand_group_total_tbl <- sdf_copy_to(sc, product_total_tbl, name = "brand_group_total_tbl", overwrite = TRUE) %>%
+# #   group_by(description) %>%
+# #   summarize(avg_price = mean(price),
+# #             total_revenue = sum(revenue),
+# #             transactional_count = n()) %>%
+# #   na.omit()
+# # 
+# # for (n_cluster in 2:3) {
+# #   
+# #   brand_k_value[n_cluster] <- n_cluster
+# #   
+# #   brand_total_kmeans <- brand_group_total_tbl %>%
+# #     ml_kmeans(formula = ~ avg_price + total_revenue + transactional_count, k = n_cluster) %>%
+# #     na.omit()
+# #   
+# #   brand_total_kmeans_tbl <- ml_predict(brand_total_kmeans,
+# #                                        brand_group_total_tbl) %>%
+# #     select(description, prediction)
+# #   
+# #   ### this is rewritting values everytime it runs the amount of clusters
+# #   brand_cluster_center <- c(brand_cluster_center,
+# #                             brand_total_kmeans)
+# #   
+# #   brand_silhouette <- as.list(ml_compute_silhouette_measure(model = brand_total_kmeans,
+# #                                                             dataset = brand_group_total_tbl,
+# #                                                             distance_measure = c("squaredEuclidean", "cosine")))
+# #   
+# #   brand_silhouette_coef <- c(brand_silhouette_coef,
+# #                              brand_silhouette)
+# # }
 
