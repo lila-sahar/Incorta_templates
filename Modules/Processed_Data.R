@@ -22,19 +22,22 @@ library(broom)
 
 sc <- spark_connect(master = "local", version = "3.0.3")
 
-## read data
-
-cereal_movement_tbl <- spark_read_csv(sc,
-                                      name = "cereal_movement_tbl",
-                                      path = "movement_cereal.csv")
-
-cereal_upc_tbl <- spark_read_csv(sc,
-                                 name = "cereal_upc_tbl",
-                                 path = "upc_cereal.csv")
-
-date_tbl <- spark_read_csv(sc,
-                           name = "date_tbl",
-                           path = "date_tbl.csv")
+get_data <- function(sc) {
+  
+  ## read data
+  
+  cereal_movement_tbl <- spark_read_csv(sc,
+                                        name = "cereal_movement_tbl",
+                                        path = "movement_cereal.csv")
+  
+  cereal_upc_tbl <- spark_read_csv(sc,
+                                   name = "cereal_upc_tbl",
+                                   path = "upc_cereal.csv")
+  
+  date_tbl <- spark_read_csv(sc,
+                             name = "date_tbl",
+                             path = "date_tbl.csv")
+  }
 
 
 # 2.0 PREPROCESS DATA ----
@@ -88,8 +91,7 @@ get_product <- function(product_detail_tbl) {
 get_product_details <- function(product_detail_tbl, product_lookup_tbl) {
   
   product_total_tbl <- product_detail_tbl %>%
-    inner_join(product_lookup_tbl, by = "description") %>%
-    write.csv(., file = "..//Processed//product_total_tbl.csv")
+    inner_join(product_lookup_tbl, by = "description")
   
   return(product_total_tbl)
 } 

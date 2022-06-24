@@ -7,8 +7,11 @@
 
 source("..//..//Modules//Processed_Data.R")
 
-get_union(cereal_movement_tbl)
+product_detail_tbl <- get_union(cereal_movement_tbl)
+print(product_detail_tbl)
 
-get_product(get_union(cereal_movement_tbl))
+product_lookup_tbl <- get_product(product_detail_tbl)
+print(product_lookup_tbl)
 
-get_product_details(get_union(cereal_movement_tbl), get_product(get_union(cereal_movement_tbl)))
+product_total_tbl <- get_product_details(product_detail_tbl, product_lookup_tbl)
+print(product_total_tbl)
