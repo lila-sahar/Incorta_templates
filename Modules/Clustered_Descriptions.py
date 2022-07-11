@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-#----------------------------------------------------------------------------
 # Created By  : Lila W Sahar
 # Created Date: 06/29/2022
 # version ='1.0'
@@ -8,10 +5,11 @@
 """ This module is made to take a .csv and use it for a clustering algorithm """ 
 # ---------------------------------------------------------------------------
 
-# Imports
+## setting up environment variables
 import findspark
 findspark.init()
 
+# Imports
 from numpy import mean
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, sum, count, mean
@@ -31,6 +29,8 @@ path = "../Data/Processed/product_total_tbl.csv"
 training = spark.read.option("header", True).csv(path)
 
 # grouping
+
+## aggregating variables
 training = training.groupBy("description") \
     .agg(mean("price").alias("avg_price"), sum("revenue").alias("total_revenue"), count("*").alias("transaction_count"))
 
@@ -38,8 +38,8 @@ training = training.groupBy("description") \
 assembler = VectorAssembler(inputCols = ["avg_price", "total_revenue", "transaction_count"], outputCol = "unscaledFeatures")
 scaler = StandardScaler(inputCol = "unscaledFeatures", outputCol = "features", withStd = True, withMean = False)
 
-# outlier removal step before or after scaling
-# afterwards: if the abs is less than a certain number than keep it
+## outlier removal step before or after scaling
+## afterwards: if the abs is less than a certain number than keep it
 
 # model
 kmeans = KMeans().setSeed(43)
