@@ -11,7 +11,8 @@ SELECT
     OSV.OrderQuantity,
     OSV.UnitPrice,
     OSV.StandardCost,
-    (OSV.OrderQuantity * OSV.UnitPrice) Revenue
+    (OSV.OrderQuantity * OSV.StandardCost) TotalCost, 
+    (OSV.OrderQuantity * OSV.UnitPrice) TotalRevenue
 FROM
     Price_Elasticity.OnlineStoreView OSV
 -- check: products are available every year of the dataset
