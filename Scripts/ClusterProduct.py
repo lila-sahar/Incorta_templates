@@ -18,12 +18,11 @@ from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 training = read("Price_Elasticity.Data_Processed")
 
 # Grouping
-training = training.withColumn("OrderQuantity", col("OrderQuantity").cast("double")) \
-    .groupBy("ProductID") \
-    .agg(mean("UnitPrice").alias("AvgPrice"), sum("Revenue").alias("TotalRevenue"), count("*").alias("TransactionCount"))
+training = training.groupBy("ProductID", "ProductName") \
+    .agg(sum("Revenue").alias("TotalRevenue"), sum("Cost").alias("TotalCost"))
 
 # Transformers
-assembler = VectorAssembler(inputCols = ["AvgPrice", "TotalRevenue", "TransactionCount"], outputCol = "unscaledFeatures")
+assembler = VectorAssembler(inputCols = ["TotalRevenue", "TotalCost"], outputCol = "unscaledFeatures")
 scaler = StandardScaler(inputCol = "unscaledFeatures", outputCol = "features", withStd = True, withMean = False)
 
 ## outlier removal step before or after scaling
