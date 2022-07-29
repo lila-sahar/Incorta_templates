@@ -8,7 +8,6 @@
 
 # Imports
 import pandas as pd
-# import numpy as np
 
 # from pyspark.sql import functions as F
 from pyspark.sql.functions import col, sum, count, mean
@@ -71,8 +70,14 @@ output = prediction.drop('unscaledFeatures', 'features')
 
 dummy_cluster = pd.get_dummies(output, columns = ['prediction'], prefix = 'Cluster')
 
+output = dummy_cluster.withColumnRenamed('Cluster_2', 'Cluster_3') \
+                      .withColumnRenamed('Cluster_1', 'Cluster_2') \
+                      .withColumnRenamed('Cluster_0', 'Cluster_1')
+
 # column_name = show_dummy.columns.values.tolist()
 # column_name.remove('prediction')
 # show_dummy = show_dummy[column_name].join(dummy_cluster)
 
-save(dummy_cluster)
+save(output)
+
+# this is subject to change depending on the MV

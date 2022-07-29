@@ -17,6 +17,8 @@ from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 processed_data = read('Price_Elasticity.Data_Processed')
 clustered_data = read('Price_Elasticity.ClusterProduct')
 
+## Join - Join the two datasets
+
 # Grouping
 processed_data = processed_data.groupBy('ProductID', 'ProductName') \
     .agg(mean('UnitPrice').alias('AvgPrice'), mean('StandardCost').alias('AvgCost'))
