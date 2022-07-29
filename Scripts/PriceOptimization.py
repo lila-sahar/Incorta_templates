@@ -1,9 +1,9 @@
 # Created By: Lila W Sahar
-# Created Date: 07/27/2022
+# Created Date: 07/29/2022
 # version = '1.0'
 
 # ---------------------------------------------------------------------------
-""" This script is made to take a Materialized View and use it for a linear regression """ 
+""" This script is made to take a Materialized View and use it for price optimization """ 
 # ---------------------------------------------------------------------------
 
 # Imports
@@ -17,8 +17,10 @@ from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 processed_data = read('Price_Elasticity.Data_Processed')
 clustered_data = read('Price_Elasticity.ClusterProduct')
 
-## Join - Join the two datasets
 
+
+
+# --------------------------------------------------
 # Grouping
 processed_data = processed_data.groupBy('ProductID', 'ProductName') \
     .agg(mean('UnitPrice').alias('AvgPrice'), mean('StandardCost').alias('AvgCost'))
