@@ -1,5 +1,5 @@
 # Created By: Lila W Sahar
-# Created Date: 07/27/2022
+# Created Date: 08/02/2022
 # version = '1.0'
 
 # ---------------------------------------------------------------------------
@@ -14,28 +14,33 @@ from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 
 # Data Load
-processed_data = read('Price_Elasticity.Data_Processed')
+processed_data = read('Price_Elasticity.Data_Processed') 
 clustered_data = read('Price_Elasticity.ClusterProduct')
-
-## Join - Join the two datasets
 
 # Grouping
 processed_data = processed_data.groupBy('ProductID', 'ProductName') \
     .agg(mean('UnitPrice').alias('AvgPrice'), mean('StandardCost').alias('AvgCost'))
 
-# Transformation
-assembler = VectorAssembler(inputCols = ['AvgPrice'], outputCol = 'Features')
+# Renaming Columns
+clustered_data = clustered_data.withColumnRenamed('ProductID', 'ProductID_1') \
+    .withColumnRenamed('ProductName', 'ProductName_1')
 
-output = assembler.transform(processed_data)
-output.select('Features')
-finalized_data = output.select('Features', 'AvgCost')
+# Join
+data = processed_data.join(clustered_data, (processed_data.ProductID == clustered_data.ProductID_1) & (processed_data.ProductName == clustered_data.ProductName_1)) \
+    .drop('ProductID_1', 'ProductName_1')
+
+# Transformation
+assembler = VectorAssembler(inputCols = ['AvgCost', 'Cluster_1', 'Cluster_2', 'Cluster_3'], outputCol = 'Features')
+
+output = assembler.transform(data)
+finalized_data = output.select('Features', 'AvgPrice')
 
 # Train-Test
 train, test = finalized_data.randomSplit([0.75, 0.25])
 
 # Model
 lr = LinearRegression()\
-    .setParams(featuresCol = 'Features', labelCol = 'AvgCost')
+    .setParams(featuresCol = 'Features', labelCol = 'AvgPrice')
 
 # Model Fitting
 lr = lr.fit(train)
@@ -44,8 +49,6 @@ lr = lr.fit(train)
 pred_results = lr.evaluate(test)
 
 result = pred_results.predictions
+result = result.drop('Features').withColumnRenamed('prediction', 'Prediction')
+
 save(result)
-
-
-## perfect the output
-# output = prediction.drop("unscaledFeatures", "features").withColumnRenamed("prediction", "Cluster")
