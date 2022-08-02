@@ -8,9 +8,9 @@
 
 # Imports
 from pyspark.sql import functions as F
-from pyspark.sql.functions import col, sum, count, mean
-from pyspark.ml import Pipeline
+from pyspark.sql.functions import col, sum, count, mean, first
 from pyspark.ml.functions import vector_to_array
+from pyspark.ml import Pipeline
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import VectorAssembler, StandardScaler, OneHotEncoder
 from pyspark.ml.evaluation import ClusteringEvaluator
@@ -59,9 +59,17 @@ output = prediction.drop('unscaledFeatures', 'features')
 # Feature: Dummy Variable
 encoder = OneHotEncoder(
     inputCols = ['prediction'],
-    outputCols = ['cluster_vec'])
+    outputCols = ['cluster_vec'],
+    dropLast = False)
 output_encoded = encoder.fit(output).transform(output)
 
-result = output_encoded.drop('TotalRevenue', 'TotalCost').withColumnRenamed('prediction', 'Cluster')
+df_col_onehot = output_encoded.select('*', vector_to_array('cluster_vec').alias('col_onehot'))
+num_categories = len(df_col_onehot.first()['col_onehot'])
+cols_expanded = [(F.col('col_onehot')[i]) for i in range(num_categories)]
+df_cols_onehot = df_col_onehot.select('ProductID','ProductName', *cols_expanded)
+
+result = df_cols_onehot.withColumnRenamed('col_onehot[0]', 'Cluster_1') \
+    .withColumnRenamed('col_onehot[1]', 'Cluster_2') \
+    .withColumnRenamed('col_onehot[2]', 'Cluster_3')
 
 save(result)
