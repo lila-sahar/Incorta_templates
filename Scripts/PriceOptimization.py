@@ -15,39 +15,18 @@ from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 
 # Data Load
 processed_data = read('Price_Elasticity.Data_Processed')
-clustered_data = read('Price_Elasticity.ClusterProduct')
+lr_data = read('Price_Elasticity.LinearRegression')
 
-
-
-
-# --------------------------------------------------
 # Grouping
 processed_data = processed_data.groupBy('ProductID', 'ProductName') \
-    .agg(mean('UnitPrice').alias('AvgPrice'), mean('StandardCost').alias('AvgCost'))
+    .agg(mean('UnitPrice').alias('AvgPrice_1'), mean('OrderQuantity').alias('AvgQuantity'))
 
-# Transformation
-assembler = VectorAssembler(inputCols = ['AvgPrice'], outputCol = 'Features')
+# Join
+data = lr_data.join(processed_data, lr_data.AvgPrice == processed_data.AvgPrice_1) \
+    .drop('AvgPrice_1')
 
-output = assembler.transform(processed_data)
-output.select('Features')
-finalized_data = output.select('Features', 'AvgCost')
+save(data)
 
-# Train-Test
-train, test = finalized_data.randomSplit([0.75, 0.25])
-
-# Model
-lr = LinearRegression()\
-    .setParams(featuresCol = 'Features', labelCol = 'AvgCost')
-
-# Model Fitting
-lr = lr.fit(train)
-
-# Export
-pred_results = lr.evaluate(test)
-
-result = pred_results.predictions
-save(result)
-
-
-## perfect the output
-# output = prediction.drop("unscaledFeatures", "features").withColumnRenamed("prediction", "Cluster")
+# take the output of the linear regression to map the output on a demand curve (quantity on price aka quantity with linear regression output)
+# then map z = 1 where z is elasticity because that is when MR = MC
+# this should give you the optimal price for a product
