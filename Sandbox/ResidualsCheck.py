@@ -107,6 +107,83 @@ chisq_cost_quantity.show()
 # Linear Regressions
 ## assembler_price_cost = VectorAssembler(inputCols = ['AvgPrice'], outputCol = 'Features')
 ## output_price_cost = assembler_price_cost.transform(processed_data)
+
+final_price_cost = output_price_cost.select('Features','AvgCost')
+train_data, test_data = final_price_cost.randomSplit([0.7,0.3])
+train_data.describe().show()
+
 price_cost_lr = LinearRegression(featuresCol = 'Features', labelCol = 'AvgCost')
+price_cost_model = price_cost_lr.fit(train_data)
+price_cost_results = price_cost_model.evaluate(test_data)
 
+print('Rsquared Error :', price_cost_results.r2)
+## Rsquared Error: 0.9769668026112462
+### 97% of the regression model covers most part of the variance of the values of the response variable
+print('Mean Squared Error :', price_cost_results.meanSquaredError)
+## Mean Squared Error: 5258.389368068349
+print('Root Mean Square Deviation :', price_cost_results.rootMeanSquaredError)
+## Root Mean Square Deviation: 72.51475276154741
+print('Mean Absolute Error :', price_cost_results.meanAbsoluteError)
+## Mean Absolute Error: 51.88376154944492
+print('Explained Variance :', price_cost_results.explainedVariance)
+## Explained Variance: 217089.20163281556
 
+unlabeled_data = test_data.select('Features')
+price_cost_predictions = price_cost_model.transform(unlabeled_data)
+price_cost_predictions.show()
+
+# ------------------------------------------------------------------------------------
+## assembler_price_quantity = VectorAssembler(inputCols = ['AvgPrice'], outputCol = 'Features')
+## output_price_quantity = assembler_price_quantity.transform(processed_data)
+
+final_price_quantity = output_price_quantity.select('Features','AvgQuantity')
+train_data, test_data = final_price_quantity.randomSplit([0.7,0.3])
+train_data.describe().show()
+
+price_quantity_lr = LinearRegression(featuresCol = 'Features', labelCol = 'AvgQuantity')
+price_quantity_model = price_quantity_lr.fit(train_data)
+price_quantity_results = price_quantity_model.evaluate(test_data)
+
+print('Rsquared Error :', price_quantity_results.r2)
+## Rsquared Error: -0.13201066696908437
+### -13% of the regression model covers part of the variance of the values of the response variable
+print('Mean Squared Error :', price_quantity_results.meanSquaredError)
+## Mean Squared Error: 0.6257054078271302
+print('Root Mean Square Deviation :', price_quantity_results.rootMeanSquaredError)
+## Root Mean Square Deviation: 0.7910154283116925
+print('Mean Absolute Error :', price_quantity_results.meanAbsoluteError)
+## Mean Absolute Error: 0.60940986683515
+print('Explained Variance :', price_quantity_results.explainedVariance)
+## Explained Variance: 0.12429722851567176
+
+unlabeled_data = test_data.select('Features')
+price_quantity_predictions = price_quantity_model.transform(unlabeled_data)
+price_quantity_predictions.show()
+
+# ------------------------------------------------------------------------------------
+## assembler_cost_quantity = VectorAssembler(inputCols = ['AvgCost'], outputCol = 'Features')
+## output_cost_quantity = assembler_cost_quantity.transform(processed_data)
+
+final_cost_quantity = output_cost_quantity.select('Features','AvgQuantity')
+train_data, test_data = final_cost_quantity.randomSplit([0.7,0.3])
+train_data.describe().show()
+
+cost_quantity_lr = LinearRegression(featuresCol = 'Features', labelCol = 'AvgQuantity')
+cost_quantity_model = cost_quantity_lr.fit(train_data)
+cost_quantity_results = cost_quantity_model.evaluate(test_data)
+
+print('Rsquared Error :', price_quantity_results.r2)
+## Rsquared Error: -0.13201066696908437
+### -13% of the regression model covers part of the variance of the values of the response variable
+print('Mean Squared Error :', price_quantity_results.meanSquaredError)
+## Mean Squared Error: 0.6257054078271302
+print('Root Mean Square Deviation :', price_quantity_results.rootMeanSquaredError)
+## Root Mean Square Deviation: 0.7910154283116925
+print('Mean Absolute Error :', price_quantity_results.meanAbsoluteError)
+## Mean Absolute Error: 0.60940986683515
+print('Explained Variance :', price_quantity_results.explainedVariance)
+## Explained Variance: 0.12429722851567176
+
+unlabeled_data = test_data.select('Features')
+price_quantity_predictions = price_quantity_model.transform(unlabeled_data)
+price_quantity_predictions.show()
