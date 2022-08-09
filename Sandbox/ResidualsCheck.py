@@ -6,26 +6,28 @@
 """ Motivation: Does the price optimization algorithm need 2SLS Regession? """ 
 # ---------------------------------------------------------------------------
 
-## Set Environment Variables
+## Set Environment Variables ------------------------------------------------
 import findspark
 findspark.init()
 
-# Imports
+# Imports -------------------------------------------------------------------
+import matplotlib.pyplot as plt
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
-import matplotlib.pyplot as plt
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.stat import Correlation
 from pyspark.ml.stat import ChiSquareTest
 from pyspark.ml.regression import LinearRegression
+from pyspark.sql.types import FloatType
 
-# LOCAL TEST
+# LOCAL TEST ----------------------------------------------------------------
 spark = SparkSession.builder \
                     .master('local') \
                     .appName('ResidualsCheck') \
                     .getOrCreate()
 
-# Data Load
+# Data Load -----------------------------------------------------------------
 path = '../Data/Processed/Data_Processed.csv'
 processed_data = spark.read.option('header', True).csv(path)
 
@@ -33,11 +35,11 @@ processed_data = spark.read.option('header', True).csv(path)
 """ Purpose: Understand the correlation between `Cost`, `Price`, and `Quantity` """ 
 # ---------------------------------------------------------------------------
 
-# Grouping
+# Grouping ------------------------------------------------------------------
 processed_data = processed_data.groupBy('ProductID', 'ProductName') \
     .agg(mean('UnitPrice').alias('AvgPrice'), mean('StandardCost').alias('AvgCost'), mean('OrderQuantity').alias('AvgQuantity'))
 
-# Correlation
+# Correlation ---------------------------------------------------------------
 cor_price_cost = processed_data.stat.corr('AvgPrice', 'AvgCost')
 ## Value: 0.9875077376814002
 ## Hence, the relationship between price and cost is positive and relatively strong.
@@ -50,7 +52,7 @@ cor_cost_quantity = processed_data.stat.corr('AvgCost', 'AvgQuantity')
 ## Value: -0.18536013808736299
 ## Hence, the relationship between cost and quantity is negative and relatively weak.
 
-# Data Exploration - Graphs
+# Data Exploration - Graphs ---------------------------------------------------
 processed_data_pd = processed_data.select('AvgPrice','AvgCost', 'AvgQuantity').toPandas()
 plt.scatter(processed_data_pd.AvgPrice, processed_data_pd.AvgCost)
 plt.xlabel('Avg Price')
@@ -73,7 +75,7 @@ plt.title('Relation of Average Quantity and Average Cost')
 plt.show()
 ## Weak Negative Correlation
 
-# Hypothesis Testing - Chi Squared Test
+# Hypothesis Testing - Chi Squared Test ---------------------------------------------
 assembler_price_cost = VectorAssembler(inputCols = ['AvgPrice'], outputCol = 'Features')
 output_price_cost = assembler_price_cost.transform(processed_data)
 
@@ -104,7 +106,7 @@ chisq_cost_quantity.show()
 ## statistics: 65435.99999999638
 ### Looking like a weak relationship based on the p-value: 0.303 > 0.1
 
-# Linear Regressions
+# Linear Regressions ----------------------------------------------------------------
 ## assembler_price_cost = VectorAssembler(inputCols = ['AvgPrice'], outputCol = 'Features')
 ## output_price_cost = assembler_price_cost.transform(processed_data)
 
@@ -172,18 +174,50 @@ cost_quantity_lr = LinearRegression(featuresCol = 'Features', labelCol = 'AvgQua
 cost_quantity_model = cost_quantity_lr.fit(train_data)
 cost_quantity_results = cost_quantity_model.evaluate(test_data)
 
-print('Rsquared Error :', price_quantity_results.r2)
-## Rsquared Error: -0.13201066696908437
-### -13% of the regression model covers part of the variance of the values of the response variable
-print('Mean Squared Error :', price_quantity_results.meanSquaredError)
-## Mean Squared Error: 0.6257054078271302
-print('Root Mean Square Deviation :', price_quantity_results.rootMeanSquaredError)
-## Root Mean Square Deviation: 0.7910154283116925
-print('Mean Absolute Error :', price_quantity_results.meanAbsoluteError)
-## Mean Absolute Error: 0.60940986683515
-print('Explained Variance :', price_quantity_results.explainedVariance)
-## Explained Variance: 0.12429722851567176
+print('Rsquared Error :', cost_quantity_results.r2)
+## Rsquared Error: 0.016764786649342556
+### 1.68% of the regression model covers part of the variance of the values of the response variable
+print('Mean Squared Error :', cost_quantity_results.meanSquaredError)
+## Mean Squared Error: 1.2602815456215177
+print('Root Mean Square Deviation :', cost_quantity_results.rootMeanSquaredError)
+## Root Mean Square Deviation: 1.122622619414698
+print('Mean Absolute Error :', cost_quantity_results.meanAbsoluteError)
+## Mean Absolute Error: 0.623786246107052
+print('Explained Variance :', cost_quantity_results.explainedVariance)
+## Explained Variance: 0.03727458555214374
 
 unlabeled_data = test_data.select('Features')
-price_quantity_predictions = price_quantity_model.transform(unlabeled_data)
-price_quantity_predictions.show()
+cost_quantity_predictions = cost_quantity_model.transform(unlabeled_data)
+cost_quantity_predictions.show()
+
+# Linear Regressions - Visuals --------------------------------------------
+
+## Transform Data
+firstelement = udf(lambda v:float(v[0]), FloatType())
+### output_price_cost = output_price_cost.select(col('AvgCost'), col('AvgPrice'), firstelement('Features')) \
+###     .withColumnRenamed('<lambda>(Features)', 'Features_2')
+
+price_cost_predictions = price_cost_predictions.select(firstelement('Features'), col('prediction')) \
+    .withColumnRenamed('<lambda>(Features)', 'Features_1') \
+###     .join(output_price_cost, price_cost_predictions.Features_1 == output_price_cost.Features_2, 'left') \
+###     .select('AvgCost', 'Features_1', 'prediction') \
+    .withColumn('Residuals', col('Features_1') - col('prediction'))
+    
+price_cost_stats = price_cost_predictions.agg(mean('Residuals').alias('AvgResiduals'))
+## AvgResiduals: 96.34890843538489
+
+price_quantity_predictions = price_quantity_predictions.select(firstelement('Features'), col('prediction')) \
+    .withColumnRenamed('<lambda>(Features)', 'Features_1') \
+###     .join(output_price_cost, price_cost_predictions.Features_1 == output_price_cost.Features_2, 'left') \
+###     .select('AvgCost', 'Features_1', 'prediction') \
+    .withColumn('Residuals', col('Features_1') - col('prediction'))
+
+price_quantity_stats = price_quantity_predictions.agg(mean('Residuals').alias('AvgResiduals'))
+
+cost_quantity_predictions = cost_quantity_predictions.select(firstelement('Features'), col('prediction')) \
+    .withColumnRenamed('<lambda>(Features)', 'Features_1') \
+###     .join(output_price_cost, price_cost_predictions.Features_1 == output_price_cost.Features_2, 'left') \
+###     .select('AvgCost', 'Features_1', 'prediction') \
+    .withColumn('Residuals', col('Features_1') - col('prediction'))
+
+cost_quantity_stats = price_quantity_predictions.agg(mean('Residuals').alias('AvgResiduals'))
