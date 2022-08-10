@@ -1,5 +1,5 @@
 # Created By: Lila W Sahar
-# Created Date: 08/02/2022
+# Created Date: 08/10/2022
 # version = '1.0'
 
 # ---------------------------------------------------------------------------
@@ -17,9 +17,9 @@ from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 processed_data = read('Price_Elasticity.Data_Processed') 
 clustered_data = read('Price_Elasticity.ClusterProduct')
 
-# Grouping
-processed_data = processed_data.groupBy('ProductID', 'ProductName') \
-    .agg(mean('UnitPrice').alias('AvgPrice'), mean('StandardCost').alias('AvgCost'))
+# # Grouping
+# processed_data = processed_data.groupBy('ProductID', 'ProductName') \
+#     .agg(mean('UnitPrice').alias('AvgPrice'), mean('StandardCost').alias('AvgCost'))
 
 # Renaming Columns
 clustered_data = clustered_data.withColumnRenamed('ProductID', 'ProductID_1') \
@@ -30,17 +30,17 @@ data = processed_data.join(clustered_data, (processed_data.ProductID == clustere
     .drop('ProductID_1', 'ProductName_1')
 
 # Transformation
-assembler = VectorAssembler(inputCols = ['AvgCost', 'Cluster_1', 'Cluster_2', 'Cluster_3'], outputCol = 'Features')
+assembler = VectorAssembler(inputCols = ['StandardCost', 'Cluster_1', 'Cluster_2', 'Cluster_3'], outputCol = 'Features')
 
 output = assembler.transform(data)
-finalized_data = output.select('Features', 'AvgPrice')
+finalized_data = output.select('Features', 'UnitPrice')
 
 # Train-Test
 train, test = finalized_data.randomSplit([0.75, 0.25])
 
 # Model
 lr = LinearRegression()\
-    .setParams(featuresCol = 'Features', labelCol = 'AvgPrice')
+    .setParams(featuresCol = 'Features', labelCol = 'UnitPrice')
 
 # Model Fitting
 lr = lr.fit(train)
