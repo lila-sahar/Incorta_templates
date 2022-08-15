@@ -49,6 +49,6 @@ lr = lr.fit(train)
 pred_results = lr.evaluate(test)
 
 result = pred_results.predictions
-result = result.drop('Features').withColumnRenamed('prediction', 'Prediction')
+result = result.drop('Features').withColumnRenamed('prediction', 'Pred_UnitPrice')
 
 save(result)
