@@ -33,7 +33,7 @@ data = processed_data.join(clustered_data, (processed_data.ProductID == clustere
 assembler = VectorAssembler(inputCols = ['StandardCost', 'Cluster_1', 'Cluster_2', 'Cluster_3'], outputCol = 'Features')
 
 output = assembler.transform(data)
-finalized_data = output.select('Features', 'UnitPrice')
+finalized_data = output.select('ProductID', 'ProductName', 'Features', 'UnitPrice')
 
 # Train-Test
 train, test = finalized_data.randomSplit([0.75, 0.25])
